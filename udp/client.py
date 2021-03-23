@@ -22,31 +22,35 @@ def loop(sock):
 def put(sock, filenames):
     client_block = 0
     timeout_counter = 0
+    last_package = None
+    address = SETTINGS['CONNECT']
+
     for filename in filenames:
         file = utils.read(filename)
         if file is None:
             print(f'File {filename} does not exists')
             continue
-
         wrq = utils.WRQ.create(filename, SETTINGS['MODE'].value)
         print(f'sending {wrq}')
-        sock.sendto(wrq.package, SETTINGS['CONNECT'])
+        sock.sendto(wrq.package, address)
+        last_package = wrq.package
         file_block = file[0:512]
         block = 0
 
         while True:
             try:
                 data, address = utils.recv(sock)
+                print(f'recieved {data}')
+
             except socket.timeout:
                 if timeout_counter > 10:
                     print('Timed out')
                     break
                 else:
                     print('Retrying...')
-                    sock.sendto(wrq.package, SETTINGS['CONNECT'])
+                    sock.sendto(last_package, address)
                     timeout_counter += 1
-
-            print(f'recieved {data}')
+            
             if data.opcode == utils.Operation.ERROR:
                 break
 
@@ -60,7 +64,9 @@ def put(sock, filenames):
                 if len(data_pack.data) == 0:
                     break
                 print(f'sending {data_pack}')
+
                 sock.sendto(data_pack.package, address)
+                last_package = data_pack.package
 
                 file_block = file[client_block * 512: client_block * 512 + 512]
 
@@ -68,6 +74,8 @@ def put(sock, filenames):
 def get(sock, filenames):
     client_block = 1
     timeout_counter = 0
+    last_package = None
+    address = SETTINGS['CONNECT']
 
     for filename in filenames:
         if utils.read(filename) is not None:
@@ -75,23 +83,26 @@ def get(sock, filenames):
             continue
         rrq = utils.RRQ.create(filename, SETTINGS['MODE'].value)
         print(f'sending {rrq}')
-        sock.sendto(rrq.package, SETTINGS['CONNECT'])
+        sock.sendto(rrq.package, address)
+        last_package = rrq.package
         file = b''
         last = False
 
         while not last:
             try:
                 data, address = utils.recv(sock)
+                print(f'recieved {data}')
+
             except socket.timeout:
                 if timeout_counter > 10:
                     print('Timed out')
                     break
                 else:
                     print('Retrying...')
-                    sock.sendto(rrq.package, SETTINGS['CONNECT'])
+                    sock.sendto(last_package, address)
                     timeout_counter += 1
+
             else:
-                print(f'recieved {data}')
                 if data.opcode == utils.Operation.ERROR:
                     last = False
                     break
@@ -108,6 +119,7 @@ def get(sock, filenames):
                             ack = utils.ACK.create(data.block)
                             print(f'sending {ack}')
                             sock.sendto(ack.package, address)
+                            last_package = ack.package
 
                             client_block += 1
 

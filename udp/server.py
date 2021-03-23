@@ -111,6 +111,9 @@ class ServerThread(Thread):
                 clients[address].counter_timeout = 0
                 clients[address].get_opcode(data.opcode)
 
+                for client in clients:
+                    client.check_timeout()
+
 
 def main():
     print('RUN')
